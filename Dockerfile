@@ -12,6 +12,9 @@ ARG ANDROID_IMAGE=https://github.com/AkihiroSuda/anbox-android-images-mirror/rel
 # https://build.anbox.io/android-images/2018/07/19/android_amd64.img.sha256sum
 ARG ANDROID_IMAGE_SHA256=6b04cd33d157814deaf92dccf8a23da4dc00b05ca6ce982a03830381896a8cca
 
+ARG HOUDINI_Y_URL=http://dl.android-x86.org/houdini/7_y/houdini.sfs
+ARG HOUDINI_Z_URL=http://dl.android-x86.org/houdini/7_z/houdini.sfs
+
 FROM ${BASE} AS anbox
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
@@ -67,11 +70,46 @@ FROM ${BASE} AS android-img
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
   apt-get install -qq -y --no-install-recommends \
-  ca-certificates curl
+  ca-certificates curl squashfs-tools lzip
 ARG ANDROID_IMAGE
 ARG ANDROID_IMAGE_SHA256
 RUN curl --retry 10 -L -o /android.img $ANDROID_IMAGE \
-    && echo $ANDROID_IMAGE_SHA256 /android.img | sha256sum --check
+  && echo $ANDROID_IMAGE_SHA256 /android.img | sha256sum --check && \
+# unpack android img
+  IMGDIR=/android-img && \
+  rm -rf ${IMGDIR} && \
+  mkdir -p ${IMGDIR} && \
+  unsquashfs -f -d ${IMGDIR} /android.img && \
+  rm -rf /android.img && \
+# download and unpack houdini_y
+  curl --retry 10 -L -o /houdini_y.sfs $HOUDINI_Y_URL && \
+  rm -rf /houdini_y && \
+  mkdir -p /houdini_y && \
+  unsquashfs -f -d /houdini_y /houdini_y.sfs && \
+  LIBDIR="${IMGDIR}/system/lib" && \
+  mkdir -p "${LIBDIR}/arm" && \
+  cp -r /houdini_y/* "${LIBDIR}/arm" && \
+  chown -R 100000:100000 "${LIBDIR}/arm" && \
+  mv "${LIBDIR}/arm/libhoudini.so" "${LIBDIR}/libhoudini.so" && \
+# download and unpack houdini_z
+  curl --retry 10 -L -o /houdini_z.sfs $HOUDINI_Z_URL && \
+  rm -rf /houdini_z && \
+  mkdir -p /houdini_z && \
+  unsquashfs -f -d /houdini_z /houdini_z.sfs && \
+  LIBDIR64="${IMGDIR}/system/lib64" && \
+  mkdir -p "${LIBDIR64}/arm64" && \
+  cp -r /houdini_z/* "${LIBDIR64}/arm64" && \
+  chown -R 100000:100000 "${LIBDIR64}/arm64" && \
+  mv "${LIBDIR64}/arm64/libhoudini.so" "${LIBDIR64}/libhoudini.so" && \
+# enable opengles
+  echo "ro.opengles.version=131072" | tee -a "${IMGDIR}/system/build.prop" && \
+# set processors
+  sed -i "s#^ro.product.cpu.abilist=x86_64,x86#ro.product.cpu.abilist=x86_64,x86,armeabi-v7a,armeabi,arm64-v8a#g" "${IMGDIR}/system/build.prop" && \
+  sed -i "s#^ro.product.cpu.abilist32=x86#ro.product.cpu.abilist32=x86,armeabi-v7a,armeabi#g" "${IMGDIR}/system/build.prop" && \
+  sed -i "s#^ro.product.cpu.abilist64=x86_64#ro.product.cpu.abilist64=x86_64,arm64-v8a#g" "${IMGDIR}/system/build.prop" && \
+  echo "persist.sys.nativebridge=1" | tee -a "${IMGDIR}/system/build.prop" && \
+  sed -i "s#^ro.dalvik.vm.native.bridge=0#ro.dalvik.vm.native.bridge=libhoudini.so#g" "${IMGDIR}/default.prop" && \
+  mksquashfs ${IMGDIR} /android.img -b 131072 -comp xz
 
 FROM ${BASE}
 ENV DEBIAN_FRONTEND=noninteractive
