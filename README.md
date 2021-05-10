@@ -1,3 +1,10 @@
+# :warning: Deprecated in favor of ReDroid
+
+As of April 2021, AinD is deprecated in favor of [ReDroid](https://github.com/remote-android/redroid-doc).
+
+While Anbox/AinD has got stuck in Android 7.1, ReDroid supports very recent Android versions: 8.1, 9, 10, 11, and Android S (12).
+
+- - -
 # AinD: Android (Anbox) in Docker
 
 AinD launches Android apps in Docker, by nesting [Anbox](https://anbox.io/) containers inside Docker.
@@ -97,6 +104,21 @@ The manifest is known to work on:
 - kind 0.7.0 [Apr 14, 2020]
   - Kubernetes 1.17.0, Ubuntu 19.10, Kernel 5.3.0-46-generic, containerd 1.3.2
   - **NOTE**: Requires `docker exec kind-control-plane mount -o remount,rw /sys`
+
+### Docker Compose
+
+To bring the container up simply run
+```
+docker-compose up -d
+```
+the vnc password can be gotten with
+```
+docker-compose exec aind cat /home/user/.vnc/passwdfile
+```
+you can check how far it is with
+```
+docker-compose exec aind ps -ef
+```
 
 ## Tips
 
